@@ -56,6 +56,10 @@ def parse_command_line_arguments():
                         required=False, action='store_true')
     parser.add_argument('--delete-recordings-after-seconds', type=int, default=0,
                         help='delete online recordings after X seconds')
+    parser.add_argument('--token-path', type=str, default='./',
+                        help='path to token.json')
+    parser.add_argument('--credentials-path', type=str, default='./',
+                        help='path to credentials.json')
 
     return parser.parse_args()
 
@@ -78,7 +82,8 @@ class MotionDetector:
         self.__height = args.height
         self.__min_pixel_diff = args.min_pixel_diff
         self.__capture_lores = args.capture_lores
-        self.__google_drive_service = GoogleDriveService() if args.drive_upload else None
+        self.__google_drive_service = GoogleDriveService(token_path=args.token_path,
+                                                         credentials_path=args.credentials_path) if args.drive_upload else None
         self.__recording_dir = args.recording_dir
         self.__delete_local_recordings_after_upload = args.delete_local_recordings_after_upload
         self.__delete_recordings_after_seconds = args.delete_recordings_after_seconds
