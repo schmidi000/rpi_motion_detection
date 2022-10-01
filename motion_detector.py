@@ -116,7 +116,7 @@ class MotionDetector:
         previous_frame = None
         encoding = False
         ltime = 0
-        recording_start_time = 0
+        recording_start_time = None
         file_path = None
 
         while True:
@@ -133,8 +133,8 @@ class MotionDetector:
                         encoding = True
                     ltime = datetime.datetime.now()
                 else:
-                    if (encoding and ((datetime.datetime.now() - ltime).total_seconds() > 5.0)) or (
-                            self.__max_recording_length_seconds > 0 and (
+                    if (encoding and ((datetime.datetime.now() - ltime).total_seconds() > 5.0)) or \
+                            (self.__max_recording_length_seconds > 0 and recording_start_time is not None and (
                             (datetime.datetime.now() - recording_start_time).total_seconds() >
                             self.__max_recording_length_seconds)):
                         self.__encoder.output.stop()
