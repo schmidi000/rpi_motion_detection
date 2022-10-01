@@ -23,6 +23,19 @@ sudo apt-get install -y python3-picamera2
 python3 main.py
 ~~~
 
+## Start on boot
+To start the motion detector on boot you have to follow those steps:
+#### 1) ```mkdir ~/.config/autostart```
+#### 2) ```nano ~/.config/autostart/MotionDetector.desktop```
+#### 3) add the following content to the ```.desktop``` file:
+~~~
+[Desktop Entry]
+Name=Motion Detector
+Type=Application
+Comment=RPI motion detection
+Exec=/usr/bin/python /path/to/motion_detector.py arguments...
+~~~
+
 ## Command line arguments
 
 #### Enable preview
