@@ -60,6 +60,8 @@ def parse_command_line_arguments():
                         help='path to token.json')
     parser.add_argument('--credentials-path', type=str, default='./',
                         help='path to credentials.json')
+    parser.add_argument('--max-recording-length-seconds', type=int, default=0,
+                        help='limit recording length to seconds')
 
     return parser.parse_args()
 
@@ -91,6 +93,7 @@ class MotionDetector:
         self.__preview_y = args.preview_y
         self.__preview_width = args.preview_width
         self.__preview_height = args.preview_height
+        self.__max_recording_length_seconds = args.max_recording_length_seconds
 
         self.__set_up_camera(args.preview)
 
@@ -113,6 +116,7 @@ class MotionDetector:
         previous_frame = None
         encoding = False
         ltime = 0
+        recording_start_time = 0
         file_path = None
 
         while True:
@@ -125,10 +129,14 @@ class MotionDetector:
                         file_path = f"{self.__recording_dir}{datetime.datetime.now().isoformat()}.h264"
                         self.__encoder.output.fileoutput = file_path
                         self.__encoder.output.start()
+                        recording_start_time = datetime.datetime.now()
                         encoding = True
                     ltime = datetime.datetime.now()
                 else:
-                    if encoding and (datetime.datetime.now() - ltime).total_seconds() > 5.0:
+                    if (encoding and ((datetime.datetime.now() - ltime).total_seconds() > 5.0)) or (
+                            self.__max_recording_length_seconds > 0 and (
+                            (datetime.datetime.now() - recording_start_time).total_seconds() >
+                            self.__max_recording_length_seconds)):
                         self.__encoder.output.stop()
                         _, file_name = os.path.split(file_path)
                         self.__upload_file(file_path=file_path, file_name=file_name)
@@ -172,7 +180,6 @@ class MotionDetector:
         :param file_path: file to delete
         """
         if self.__delete_local_recordings_after_upload:
-            print(file_path)
             os.remove(file_path)
 
     def __delete_old_online_recordings(self):
