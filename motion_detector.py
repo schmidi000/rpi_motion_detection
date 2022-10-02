@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 import argparse
 import datetime
+import logging
 import os
 import signal
 import sys
@@ -11,6 +12,10 @@ from picamera2.encoders import H264Encoder
 from picamera2.outputs import CircularOutput
 
 from service.google_drive_service import GoogleDriveService
+
+# setLevel(logging.WARNING) seems to have no impact
+logging.getLogger("picamera2").disabled = True
+logging.getLogger("google").setLevel(logging.WARNING)
 
 
 def command_line_handler(signum, frame):
@@ -68,6 +73,7 @@ def parse_command_line_arguments():
 
 class MotionDetector:
     """This class contains the main logic for motion detection."""
+    __MAX_TIME_SINCE_LAST_MOTION_DETECTION_SECONDS = 5.0
 
     def __init__(self, args: argparse.Namespace):
         """MotionDetector
@@ -76,6 +82,9 @@ class MotionDetector:
         """
         self.__picam2 = None
         self.__encoder = None
+        self.__encoding = False
+        self.__start_time_of_last_recording = None
+        self.__time_of_last_motion_detection = None
 
         self.__zoom_factor = args.zoom
         self.__lores_width = args.lores_width
@@ -114,34 +123,53 @@ class MotionDetector:
         """
         w, h = self.__lsize
         previous_frame = None
-        encoding = False
-        ltime = 0
-        recording_start_time = None
-        file_path = None
 
         while True:
             current_frame = self.__picam2.capture_buffer("lores" if self.__capture_lores else "main")
             current_frame = current_frame[:w * h].reshape(h, w)
             if previous_frame is not None:
                 mse = np.square(np.subtract(current_frame, previous_frame)).mean()
-                if mse > self.__min_pixel_diff:
-                    if not encoding:
-                        file_path = f"{self.__recording_dir}{datetime.datetime.now().isoformat()}.h264"
-                        self.__encoder.output.fileoutput = file_path
-                        self.__encoder.output.start()
-                        recording_start_time = datetime.datetime.now()
-                        encoding = True
-                    ltime = datetime.datetime.now()
+                if mse > self.__min_pixel_diff and not self.__is_max_recording_length_exceeded():
+                    if not self.__encoding:
+                        self.__start_time_of_last_recording = datetime.datetime.now()
+                        logging.info(f"start recording of new recording: {self.__start_time_of_last_recording}")
+                        self.__start_recording()
+                    self.__time_of_last_motion_detection = datetime.datetime.now()
+                elif self.__is_max_recording_length_exceeded():
+                    logging.info(
+                        f"max recording time exceeded after {(datetime.datetime.now() - self.__start_time_of_last_recording).total_seconds()} seconds")
+                    self.__write_recording_to_file()
                 else:
-                    if (encoding and ((datetime.datetime.now() - ltime).total_seconds() > 5.0)) or \
-                            (self.__max_recording_length_seconds > 0 and recording_start_time is not None and (
-                            (datetime.datetime.now() - recording_start_time).total_seconds() >
-                            self.__max_recording_length_seconds)):
-                        self.__encoder.output.stop()
-                        _, file_name = os.path.split(file_path)
-                        self.__upload_file(file_path=file_path, file_name=file_name)
-                        encoding = False
+                    if self.__is_max_time_since_last_motion_detection_exceeded():
+                        logging.info("diff between time now and last motion detection")
+                        self.__write_recording_to_file()
             previous_frame = current_frame
+
+    def __is_max_recording_length_exceeded(self):
+        return self.__max_recording_length_seconds > 0 and self.__start_time_of_last_recording is not None and (
+                (
+                            datetime.datetime.now() - self.__start_time_of_last_recording).total_seconds() >= self.__max_recording_length_seconds
+        )
+
+    def __is_max_time_since_last_motion_detection_exceeded(self):
+        return self.__encoding and self.__time_of_last_motion_detection is not None and \
+               ((datetime.datetime.now() - self.__time_of_last_motion_detection).total_seconds() > self.__MAX_TIME_SINCE_LAST_MOTION_DETECTION_SECONDS)
+
+    def __start_recording(self):
+        self.__encoder.output.fileoutput = self.__get_recording_file_path()
+        self.__encoder.output.start()
+        self.__encoding = True
+
+    def __write_recording_to_file(self):
+        file_path = self.__get_recording_file_path()
+        self.__encoder.output.stop()
+        _, file_name = os.path.split(file_path)
+        self.__upload_file(file_path=file_path, file_name=file_name)
+        self.__encoding = False
+        self.__start_time_of_last_recording = None
+
+    def __get_recording_file_path(self):
+        return f"{self.__recording_dir}{self.__start_time_of_last_recording.isoformat()}.h264"
 
     def __set_up_camera(self, enable_preview):
         """
@@ -180,6 +208,7 @@ class MotionDetector:
         :param file_path: file to delete
         """
         if self.__delete_local_recordings_after_upload:
+            logging.info(f"Deleting local recording {file_path}")
             os.remove(file_path)
 
     def __delete_old_online_recordings(self):
@@ -213,6 +242,7 @@ class MotionDetector:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     command_line_arguments = parse_command_line_arguments()
     motion_detector = MotionDetector(command_line_arguments)
     signal.signal(signal.SIGINT, command_line_handler)

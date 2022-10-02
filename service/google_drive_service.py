@@ -2,6 +2,7 @@
 from __future__ import print_function
 
 import datetime
+import logging
 import os.path
 
 from google.auth.transport.requests import Request
@@ -74,13 +75,11 @@ class GoogleDriveService:
         elif len(folders.get("files")) > 1:
             raise Exception(f"More than one folder with name {google_drive_folder} found!")
         else:
-            print(folders)
             file_metadata = {
                 "name": google_drive_folder,
                 "mimeType": "application/vnd.google-apps.folder"
             }
 
-            # pylint: disable=maybe-no-member
             folder = self.__client.files().create(body=file_metadata, fields='id').execute()
 
             return folder.get('id')
@@ -99,7 +98,7 @@ class GoogleDriveService:
             file_id = file.get("id")
             if creation_date <= delete_before_date:
                 self.__client.files().delete(fileId=file_id).execute()
-                print(f"Deleted file {file.get('name')} from Google Drive")
+                logging.info(f"Deleted file {file.get('name')} from Google Drive")
 
     def upload_video(self, file_path, file_name, google_drive_folder="recordings", mime_type="video/H264"):
         """
@@ -117,10 +116,10 @@ class GoogleDriveService:
                                     mimetype=mime_type)
             file = self.__client.files().create(body=file_metadata, media_body=media,
                                                 fields="id").execute()
-            print(f"Uploaded video with file ID: {file.get('id')}")
+            logging.info(f"Uploaded video with file ID: {file.get('id')}")
 
         except HttpError as error:
-            print(f"An error occurred: {error}")
+            logging.error(f"An error occurred: {error}")
             file = None
 
         return file.get("id")
