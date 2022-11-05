@@ -128,3 +128,36 @@ python3 main.py --drive-upload
 ~~~
 
 If this is your first time running the Google Drive sign in, you have to follow the instructions on the command line.
+
+## Limit bandwidth
+If you run your Raspberry in your home network, you probably want to limit the bandwidth. If you don't have a router with QoS, you can use tools like WonderShaper.
+
+Follow those steps to enable traffic shaping on boot:
+1) install WonderShaper
+~~~
+sudo apt-get install wondershaper
+~~~
+
+2) create file
+~~~
+sudo nano /etc/systemd/system/wondershaper.service
+~~~
+
+3) add the content
+Here is an example systemd unit file that limits the upload and download speed of the "wlan0" interface to 2048 Kbps:
+~~~
+[Unit]
+Description=Limit UL and DL to 2048kbps
+
+[Service]
+Type=simple
+ExecStart=wondershaper wlan0 2048 2048
+
+[Install]
+WantedBy=multi-user.target
+~~~
+
+4) start service
+~~~
+sudo systemctl enable --now wondershaper.service
+~~~
